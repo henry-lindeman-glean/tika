@@ -232,7 +232,7 @@ public class OneNoteParserTest extends TikaTest {
         Metadata metadata = new Metadata();
         String txt = getText("testOneNoteFromOffice365.one", metadata);
 
-        assertEquals(1, metadata.getValues(ONE_NOTE_PREFIX + "mostRecentAuthors").length);
+        assertEquals(2, metadata.getValues(ONE_NOTE_PREFIX + "mostRecentAuthors").length);
 
         assertEquals(Instant.ofEpochSecond(1636621406),
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(ONE_NOTE_PREFIX + "creationTimestamp"))));
@@ -241,6 +241,8 @@ public class OneNoteParserTest extends TikaTest {
         assertEquals(Instant.ofEpochSecond(1636621448),
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(TikaCoreProperties.MODIFIED))));
         assertContains("Section1Page1Content", txt);
+        // content from revisions other than each cell's current revision manifest
+        assertContains("Section1Page2Content", txt);
     }
 
     /**
@@ -260,12 +262,14 @@ public class OneNoteParserTest extends TikaTest {
 
         assertEquals(Instant.ofEpochSecond(1591712300),
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(ONE_NOTE_PREFIX + "creationTimestamp"))));
-        assertEquals(Instant.ofEpochMilli(1623252330000L),
+        assertEquals(Instant.ofEpochMilli(1623597638000L),
                 Instant.ofEpochMilli(Long.parseLong(metadata.get(ONE_NOTE_PREFIX + "lastModifiedTimestamp"))));
-        assertEquals(Instant.ofEpochSecond(1623597587),
+        assertEquals(Instant.ofEpochSecond(1623597638),
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(TikaCoreProperties.MODIFIED))));
 
         assertContains("Section1Page1Content", txt);
+        // content from revisions other than each cell's current revision manifest
+        assertContains("Section1Page2Content", txt);
     }
 
     private void assertNoJunk(String txt) {

@@ -63,10 +63,11 @@ public class RevisionStoreObjectGroup {
                 } else if (objectDeclaration.objectPartitionID.getDecodedValue() == 1) {
                     revisionObject.propertySet =
                             new PropertySetObject(objectDeclaration, objectData);
-                    if (revisionObject.jcid.jcid.isFileData != 0) {
-                        revisionObject.referencedObjectID = objectData.objectExGUIDArray;
-                        revisionObject.referencedObjectSpacesID = objectData.cellIDArray;
-                    }
+                    // the object extended GUID array lists the objects referenced by this
+                    // object, in the same order as the CompactIDs in the OID stream of the
+                    // ObjectSpaceObjectPropSet - see MS-ONESTORE section 2.7.8
+                    revisionObject.referencedObjectID = objectData.objectExGUIDArray;
+                    revisionObject.referencedObjectSpacesID = objectData.cellIDArray;
                 }
             }
 

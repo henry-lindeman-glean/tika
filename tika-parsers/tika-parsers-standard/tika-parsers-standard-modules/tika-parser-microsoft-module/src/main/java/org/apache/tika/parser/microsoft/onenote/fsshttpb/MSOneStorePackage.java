@@ -25,8 +25,11 @@ import java.time.LocalDateTime;
 import java.time.Month;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -39,13 +42,17 @@ import org.apache.tika.metadata.Property;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.parser.microsoft.onenote.OneNotePropertyEnum;
 import org.apache.tika.parser.microsoft.onenote.OneNoteTreeWalkerOptions;
+import org.apache.tika.parser.microsoft.onenote.fsshttpb.property.ArrayNumber;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.property.EightBytesOfData;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.property.FourBytesOfData;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.property.IProperty;
+import org.apache.tika.parser.microsoft.onenote.fsshttpb.property.PrtArrayOfPropertyValues;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.property.PrtFourBytesOfLengthFollowedByData;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.CellManifestDataElementData;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.PropertySet;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.RevisionManifestDataElementData;
+import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.RevisionManifestRootDeclare;
+import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.RevisionStoreCell;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.RevisionStoreObject;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.RevisionStoreObjectGroup;
 import org.apache.tika.parser.microsoft.onenote.fsshttpb.streamobj.StorageIndexCellMapping;
@@ -101,9 +108,13 @@ public class MSOneStorePackage {
     public List<CellManifestDataElementData> cellManifests;
     public HeaderCell headerCell;
     public List<RevisionStoreObjectGroup> dataRoot;
+    public RevisionStoreCell dataRootCell;
     public List<RevisionStoreObjectGroup> OtherFileNodeList;
-    private boolean mostRecentAuthorProp = false;
-    private boolean originalAuthorProp = false;
+    /**
+     * The content cells (object spaces, e.g. pages), each with its object groups and the
+     * root object declarations of its current revision.
+     */
+    public List<RevisionStoreCell> cells;
     private Instant lastModifiedTimestamp = Instant.MIN;
     private long creationTimestamp = Long.MAX_VALUE;
     private long lastModified = Long.MIN_VALUE;
@@ -112,6 +123,7 @@ public class MSOneStorePackage {
         this.revisionManifests = new ArrayList<>();
         this.cellManifests = new ArrayList<>();
         this.OtherFileNodeList = new ArrayList<>();
+        this.cells = new ArrayList<>();
     }
 
     /**
@@ -160,96 +172,32 @@ public class MSOneStorePackage {
                 property == OneNotePropertyEnum.RichEditTextUnicode;
     }
 
+    /**
+     * The attribution of an Author property, determined by the property through which the
+     * author object was referenced.
+     */
+    private enum AuthorRole {
+        NONE, MOST_RECENT, ORIGINAL
+    }
+
     public void walkTree(OneNoteTreeWalkerOptions options, Metadata metadata,
                          XHTMLContentHandler xhtml)
             throws SAXException, TikaException, IOException {
-        for (RevisionStoreObjectGroup revisionStoreObjectGroup : OtherFileNodeList) {
-            for (RevisionStoreObject revisionStoreObject : revisionStoreObjectGroup.objects) {
-                PropertySet propertySet =
-                        revisionStoreObject.propertySet.objectSpaceObjectPropSet.body;
-                for (int i = 0; i < propertySet.rgData.size(); ++i) {
-                    IProperty property = propertySet.rgData.get(i);
-                    PropertyID propertyID = propertySet.rgPrids[i];
-                    PropertyType propertyType = PropertyType.fromIntVal(propertyID.type);
-                    OneNotePropertyEnum oneNotePropertyEnum =
-                            OneNotePropertyEnum.of(Unsigned.uint(propertyID.value).longValue());
-                    if (oneNotePropertyEnum == OneNotePropertyEnum.LastModifiedTimeStamp) {
-                        long fullval = getScalar(property);
-                        Instant instant = Instant.ofEpochSecond(
-                                fullval / 10000000 + DATETIME_EPOCH_DIFF_1601);
-                        if (instant.isAfter(lastModifiedTimestamp)) {
-                            lastModifiedTimestamp = instant;
-                        }
-                        metadata.set(ONE_NOTE_PREFIX + "lastModifiedTimestamp",
-                                String.valueOf(lastModifiedTimestamp.toEpochMilli()));
-                    } else if (oneNotePropertyEnum == OneNotePropertyEnum.CreationTimeStamp) {
-                        // add the TIME32_EPOCH_DIFF_1980 because OneNote TIME32 epoch time is per 1980, not
-                        // 1970
-                        long scalar = getScalar(property);
-                        long creationTs = scalar + TIME32_EPOCH_DIFF_1980;
-                        if (creationTs < creationTimestamp) {
-                            creationTimestamp = creationTs;
-                        }
-                        metadata.set(ONE_NOTE_PREFIX + "creationTimestamp", String.valueOf(creationTimestamp));
-                    } else if (oneNotePropertyEnum == OneNotePropertyEnum.LastModifiedTime) {
-                        // add the TIME32_EPOCH_DIFF_1980 because OneNote TIME32 epoch time is per 1980, not
-                        // 1970
-                        long scalar = getScalar(property);
-                        long lastMod = scalar + TIME32_EPOCH_DIFF_1980;
-                        if (lastMod > lastModified) {
-                            lastModified = lastMod;
-                        }
-                        metadata.set(TikaCoreProperties.MODIFIED, String.valueOf(lastModified));
-                    } else if (oneNotePropertyEnum == OneNotePropertyEnum.Author) {
-                        String author =
-                                new String(((PrtFourBytesOfLengthFollowedByData) property).data,
-                                        StandardCharsets.UTF_8);
-                        if (mostRecentAuthorProp) {
-                            mostRecentAuthors.add(author);
-                        } else if (originalAuthorProp) {
-                            originalAuthors.add(author);
-                        } else {
-                            authors.add(author);
-                        }
-                    } else if (oneNotePropertyEnum == OneNotePropertyEnum.AuthorMostRecent) {
-                        mostRecentAuthorProp = true;
-                    } else if (oneNotePropertyEnum == OneNotePropertyEnum.AuthorOriginal) {
-                        originalAuthorProp = true;
-                    } else if (propertyType == PropertyType.FourBytesOfLengthFollowedByData) {
-                        boolean isBinary = propertyIsBinary(oneNotePropertyEnum);
-                        PrtFourBytesOfLengthFollowedByData dataProperty =
-                                (PrtFourBytesOfLengthFollowedByData) property;
-                        if ((dataProperty.data.length & 1) == 0 &&
-                                oneNotePropertyEnum != OneNotePropertyEnum.TextExtendedAscii &&
-                                !isBinary) {
-                            if (options.getUtf16PropertiesToPrint().contains(oneNotePropertyEnum)) {
-                                xhtml.startElement(P);
-                                xhtml.characters(
-                                        new String(dataProperty.data, StandardCharsets.UTF_16LE));
-                                xhtml.endElement(P);
-                            }
-                        } else if (oneNotePropertyEnum == OneNotePropertyEnum.TextExtendedAscii) {
-                            xhtml.startElement(P);
-                            xhtml.characters(
-                                    new String(dataProperty.data, StandardCharsets.US_ASCII));
-                            xhtml.endElement(P);
-                        } else if (!isBinary) {
-                            if (options.getUtf16PropertiesToPrint().contains(oneNotePropertyEnum)) {
-                                xhtml.startElement(P);
-                                xhtml.characters(
-                                        new String(dataProperty.data, StandardCharsets.UTF_16LE));
-                                xhtml.endElement(P);
-                            }
-                        } else {
-                            if (oneNotePropertyEnum == OneNotePropertyEnum.RichEditTextUnicode) {
-                                handleRichEditTextUnicode(dataProperty.data, xhtml);
-                            } else {
-                                //TODO -- these seem to be somewhat broken font files and other
-                                //odds and ends...what are they and how should we process them?
-                                //handleEmbedded(content.size());
-                            }
-                        }
-                    }
+        if (!cells.isEmpty()) {
+            // Walk each cell (object space, e.g. a page) as a tree, starting from the root
+            // objects of its current revision and following the object references in property
+            // order. This emits the text in document order.
+            for (RevisionStoreCell cell : cells) {
+                walkCell(cell, options, metadata, xhtml);
+            }
+        } else {
+            // no cell information available - walk the object groups in revision order
+            Map<ExGuid, RevisionStoreObject> objectsById = indexObjectsById(OtherFileNodeList);
+            Set<ExGuid> visited = new HashSet<>();
+            for (RevisionStoreObjectGroup objectGroup : OtherFileNodeList) {
+                for (RevisionStoreObject object : objectGroup.objects) {
+                    walkObject(object, objectsById, visited, AuthorRole.NONE, options, metadata,
+                            xhtml);
                 }
             }
         }
@@ -263,6 +211,246 @@ public class MSOneStorePackage {
         if (!originalAuthors.isEmpty()) {
             metadata.set(Property.externalTextBag(ONE_NOTE_PREFIX + "originalAuthors"),
                     originalAuthors.toArray(new String[]{}));
+        }
+    }
+
+    private void walkCell(RevisionStoreCell cell, OneNoteTreeWalkerOptions options,
+                          Metadata metadata, XHTMLContentHandler xhtml)
+            throws SAXException, TikaException, IOException {
+        Map<ExGuid, RevisionStoreObject> objectsById = indexObjectsById(cell.objectGroups);
+        Set<ExGuid> visited = new HashSet<>();
+        for (RevisionManifestRootDeclare rootDeclare : cell.rootDeclares) {
+            walkObject(objectsById.get(rootDeclare.objectExGuid), objectsById, visited,
+                    AuthorRole.NONE, options, metadata, xhtml);
+        }
+        // walk anything that is not reachable from the root objects so no content is lost
+        for (RevisionStoreObjectGroup objectGroup : cell.objectGroups) {
+            for (RevisionStoreObject object : objectGroup.objects) {
+                walkObject(object, objectsById, visited, AuthorRole.NONE, options, metadata,
+                        xhtml);
+            }
+        }
+    }
+
+    /**
+     * Builds a map of object ID to object. The object groups are ordered from the oldest
+     * revision to the newest, so a newer version of an object wins over an older one.
+     */
+    private Map<ExGuid, RevisionStoreObject> indexObjectsById(
+            List<RevisionStoreObjectGroup> objectGroups) {
+        Map<ExGuid, RevisionStoreObject> objectsById = new HashMap<>();
+        for (RevisionStoreObjectGroup objectGroup : objectGroups) {
+            for (RevisionStoreObject object : objectGroup.objects) {
+                if (object.objectID != null) {
+                    objectsById.put(object.objectID, object);
+                }
+            }
+        }
+        return objectsById;
+    }
+
+    private void walkObject(RevisionStoreObject object,
+                            Map<ExGuid, RevisionStoreObject> objectsById, Set<ExGuid> visited,
+                            AuthorRole authorRole, OneNoteTreeWalkerOptions options,
+                            Metadata metadata, XHTMLContentHandler xhtml)
+            throws SAXException, TikaException, IOException {
+        if (object == null || object.propertySet == null ||
+                object.propertySet.objectSpaceObjectPropSet == null) {
+            return;
+        }
+        if (object.objectID != null && !visited.add(object.objectID)) {
+            return;
+        }
+        List<ExGuid> referencedObjects =
+                object.referencedObjectID == null || object.referencedObjectID.content == null ?
+                        Collections.emptyList() : object.referencedObjectID.content;
+        List<PropertyAction> actions = new ArrayList<>();
+        collectActions(object.propertySet.objectSpaceObjectPropSet.body, referencedObjects,
+                new int[]{0}, actions);
+        // The title structure of a page (StructureElementChildNodes) appears above the page
+        // body on screen, but is declared after the body child nodes. Emit it first so the
+        // text comes out in visual order.
+        for (PropertyAction action : actions) {
+            if (action.oneNotePropertyEnum == OneNotePropertyEnum.StructureElementChildNodes) {
+                processAction(action, objectsById, visited, authorRole, options, metadata, xhtml);
+            }
+        }
+        for (PropertyAction action : actions) {
+            if (action.oneNotePropertyEnum != OneNotePropertyEnum.StructureElementChildNodes) {
+                processAction(action, objectsById, visited, authorRole, options, metadata, xhtml);
+            }
+        }
+    }
+
+    /**
+     * A property of an object, together with the object reference assigned to it if it is
+     * an object reference property.
+     */
+    private static final class PropertyAction {
+        private final IProperty property;
+        private final PropertyType propertyType;
+        private final OneNotePropertyEnum oneNotePropertyEnum;
+        private final boolean isChildReference;
+        private final ExGuid childReference;
+
+        PropertyAction(IProperty property, PropertyType propertyType,
+                       OneNotePropertyEnum oneNotePropertyEnum, boolean isChildReference,
+                       ExGuid childReference) {
+            this.property = property;
+            this.propertyType = propertyType;
+            this.oneNotePropertyEnum = oneNotePropertyEnum;
+            this.isChildReference = isChildReference;
+            this.childReference = childReference;
+        }
+    }
+
+    /**
+     * Flattens the properties of a property set, in order, into a list of actions.
+     * Properties of type ObjectID or ArrayOfObjectIDs consume, in property order, the object
+     * references of the containing object (see MS-ONESTORE section 2.7.8), so the object
+     * references must be assigned here, in property order, no matter in which order the
+     * actions are processed later.
+     */
+    private void collectActions(PropertySet propertySet, List<ExGuid> referencedObjects,
+                                int[] referenceCursor, List<PropertyAction> actions) {
+        if (propertySet == null || propertySet.rgPrids == null || propertySet.rgData == null) {
+            return;
+        }
+        for (int i = 0; i < propertySet.rgPrids.length && i < propertySet.rgData.size(); ++i) {
+            IProperty property = propertySet.rgData.get(i);
+            PropertyID propertyID = propertySet.rgPrids[i];
+            PropertyType propertyType = PropertyType.fromIntVal(propertyID.type);
+            OneNotePropertyEnum oneNotePropertyEnum =
+                    OneNotePropertyEnum.of(Unsigned.uint(propertyID.value).longValue());
+            if (propertyType == PropertyType.ObjectID) {
+                actions.add(new PropertyAction(property, propertyType, oneNotePropertyEnum, true,
+                        nextReference(referencedObjects, referenceCursor)));
+            } else if (propertyType == PropertyType.ArrayOfObjectIDs) {
+                int count = property instanceof ArrayNumber ? ((ArrayNumber) property).number : 0;
+                for (int j = 0; j < count; ++j) {
+                    actions.add(new PropertyAction(property, propertyType, oneNotePropertyEnum,
+                            true, nextReference(referencedObjects, referenceCursor)));
+                }
+            } else if (propertyType == PropertyType.PropertySet) {
+                if (property instanceof PropertySet) {
+                    collectActions((PropertySet) property, referencedObjects, referenceCursor,
+                            actions);
+                }
+            } else if (propertyType == PropertyType.ArrayOfPropertyValues) {
+                if (property instanceof PrtArrayOfPropertyValues &&
+                        ((PrtArrayOfPropertyValues) property).data != null) {
+                    for (PropertySet nested : ((PrtArrayOfPropertyValues) property).data) {
+                        collectActions(nested, referencedObjects, referenceCursor, actions);
+                    }
+                }
+            } else {
+                actions.add(new PropertyAction(property, propertyType, oneNotePropertyEnum, false,
+                        null));
+            }
+        }
+    }
+
+    private void processAction(PropertyAction action,
+                               Map<ExGuid, RevisionStoreObject> objectsById, Set<ExGuid> visited,
+                               AuthorRole authorRole, OneNoteTreeWalkerOptions options,
+                               Metadata metadata, XHTMLContentHandler xhtml)
+            throws SAXException, TikaException, IOException {
+        if (action.isChildReference) {
+            AuthorRole childRole = AuthorRole.NONE;
+            if (action.oneNotePropertyEnum == OneNotePropertyEnum.AuthorMostRecent) {
+                childRole = AuthorRole.MOST_RECENT;
+            } else if (action.oneNotePropertyEnum == OneNotePropertyEnum.AuthorOriginal) {
+                childRole = AuthorRole.ORIGINAL;
+            }
+            walkObject(action.childReference == null ? null :
+                            objectsById.get(action.childReference), objectsById, visited,
+                    childRole, options, metadata, xhtml);
+        } else {
+            processPrimitiveProperty(action.property, action.propertyType,
+                    action.oneNotePropertyEnum, authorRole, options, metadata, xhtml);
+        }
+    }
+
+    private ExGuid nextReference(List<ExGuid> referencedObjects, int[] referenceCursor) {
+        if (referenceCursor[0] < referencedObjects.size()) {
+            return referencedObjects.get(referenceCursor[0]++);
+        }
+        return null;
+    }
+
+    private void processPrimitiveProperty(IProperty property, PropertyType propertyType,
+                                          OneNotePropertyEnum oneNotePropertyEnum,
+                                          AuthorRole authorRole,
+                                          OneNoteTreeWalkerOptions options, Metadata metadata,
+                                          XHTMLContentHandler xhtml)
+            throws SAXException, TikaException, IOException {
+        if (oneNotePropertyEnum == OneNotePropertyEnum.LastModifiedTimeStamp) {
+            long fullval = getScalar(property);
+            Instant instant = Instant.ofEpochSecond(
+                    fullval / 10000000 + DATETIME_EPOCH_DIFF_1601);
+            if (instant.isAfter(lastModifiedTimestamp)) {
+                lastModifiedTimestamp = instant;
+            }
+            metadata.set(ONE_NOTE_PREFIX + "lastModifiedTimestamp",
+                    String.valueOf(lastModifiedTimestamp.toEpochMilli()));
+        } else if (oneNotePropertyEnum == OneNotePropertyEnum.CreationTimeStamp) {
+            // add the TIME32_EPOCH_DIFF_1980 because OneNote TIME32 epoch time is per 1980, not
+            // 1970
+            long scalar = getScalar(property);
+            long creationTs = scalar + TIME32_EPOCH_DIFF_1980;
+            if (creationTs < creationTimestamp) {
+                creationTimestamp = creationTs;
+            }
+            metadata.set(ONE_NOTE_PREFIX + "creationTimestamp", String.valueOf(creationTimestamp));
+        } else if (oneNotePropertyEnum == OneNotePropertyEnum.LastModifiedTime) {
+            // add the TIME32_EPOCH_DIFF_1980 because OneNote TIME32 epoch time is per 1980, not
+            // 1970
+            long scalar = getScalar(property);
+            long lastMod = scalar + TIME32_EPOCH_DIFF_1980;
+            if (lastMod > lastModified) {
+                lastModified = lastMod;
+            }
+            metadata.set(TikaCoreProperties.MODIFIED, String.valueOf(lastModified));
+        } else if (oneNotePropertyEnum == OneNotePropertyEnum.Author) {
+            String author = new String(((PrtFourBytesOfLengthFollowedByData) property).data,
+                    StandardCharsets.UTF_8);
+            if (authorRole == AuthorRole.MOST_RECENT) {
+                mostRecentAuthors.add(author);
+            } else if (authorRole == AuthorRole.ORIGINAL) {
+                originalAuthors.add(author);
+            } else {
+                authors.add(author);
+            }
+        } else if (propertyType == PropertyType.FourBytesOfLengthFollowedByData) {
+            boolean isBinary = propertyIsBinary(oneNotePropertyEnum);
+            PrtFourBytesOfLengthFollowedByData dataProperty =
+                    (PrtFourBytesOfLengthFollowedByData) property;
+            if ((dataProperty.data.length & 1) == 0 &&
+                    oneNotePropertyEnum != OneNotePropertyEnum.TextExtendedAscii && !isBinary) {
+                if (options.getUtf16PropertiesToPrint().contains(oneNotePropertyEnum)) {
+                    xhtml.startElement(P);
+                    xhtml.characters(new String(dataProperty.data, StandardCharsets.UTF_16LE));
+                    xhtml.endElement(P);
+                }
+            } else if (oneNotePropertyEnum == OneNotePropertyEnum.TextExtendedAscii) {
+                xhtml.startElement(P);
+                xhtml.characters(new String(dataProperty.data, StandardCharsets.US_ASCII));
+                xhtml.endElement(P);
+            } else if (!isBinary) {
+                if (options.getUtf16PropertiesToPrint().contains(oneNotePropertyEnum)) {
+                    xhtml.startElement(P);
+                    xhtml.characters(new String(dataProperty.data, StandardCharsets.UTF_16LE));
+                    xhtml.endElement(P);
+                }
+            } else {
+                if (oneNotePropertyEnum == OneNotePropertyEnum.RichEditTextUnicode) {
+                    handleRichEditTextUnicode(dataProperty.data, xhtml);
+                } else {
+                    //TODO -- these seem to be somewhat broken font files and other
+                    //odds and ends...what are they and how should we process them?
+                    //handleEmbedded(content.size());
+                }
+            }
         }
     }
 
