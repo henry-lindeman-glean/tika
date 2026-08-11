@@ -69,6 +69,8 @@ public class MSOneStoreParser {
     private List<DataElement> objectGroupDataElements;
     // The DataElements of Object BLOB
     private List<DataElement> objectBlOBElements;
+    // The DataElements of Object BLOB, keyed by their data element extended GUID
+    private Map<ExGuid, DataElement> objectBlOBElementsById;
 
     public MSOneStorePackage parse(DataElementPackage dataElementPackage) throws IOException {
         MSOneStorePackage msOneStorePackage = new MSOneStorePackage();
@@ -91,6 +93,10 @@ public class MSOneStoreParser {
         objectBlOBElements = dataElementPackage.dataElements.stream()
                 .filter(d -> d.dataElementType == DataElementType.ObjectDataBLOBDataElementData)
                 .collect(Collectors.toList());
+        objectBlOBElementsById = new HashMap<>();
+        for (DataElement blobElement : objectBlOBElements) {
+            objectBlOBElementsById.put(blobElement.dataElementExGuid, blobElement);
+        }
 
         msOneStorePackage.storageIndex =
                 (StorageIndexDataElementData) storageIndexDataElements.get(0).data;
@@ -247,7 +253,7 @@ public class MSOneStoreParser {
 
                 RevisionStoreObjectGroup objectGroup =
                         RevisionStoreObjectGroup.createInstance(objRef.objectGroupExtendedGUID,
-                                dataObject, isEncryption);
+                                dataObject, isEncryption, objectBlOBElementsById);
                 objectGroups.add(objectGroup);
             }
         }

@@ -232,7 +232,9 @@ public class OneNoteParserTest extends TikaTest {
         Metadata metadata = new Metadata();
         String txt = getText("testOneNoteFromOffice365.one", metadata);
 
-        assertEquals(2, metadata.getValues(ONE_NOTE_PREFIX + "mostRecentAuthors").length);
+        // only the authors of the current content count - authors that only appear in
+        // older page version snapshots are not reported
+        assertEquals(1, metadata.getValues(ONE_NOTE_PREFIX + "mostRecentAuthors").length);
 
         assertEquals(Instant.ofEpochSecond(1636621406),
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(ONE_NOTE_PREFIX + "creationTimestamp"))));
@@ -264,7 +266,7 @@ public class OneNoteParserTest extends TikaTest {
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(ONE_NOTE_PREFIX + "creationTimestamp"))));
         assertEquals(Instant.ofEpochMilli(1623597638000L),
                 Instant.ofEpochMilli(Long.parseLong(metadata.get(ONE_NOTE_PREFIX + "lastModifiedTimestamp"))));
-        assertEquals(Instant.ofEpochSecond(1623597638),
+        assertEquals(Instant.ofEpochSecond(1623597587),
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(TikaCoreProperties.MODIFIED))));
 
         assertContains("Section1Page1Content", txt);
