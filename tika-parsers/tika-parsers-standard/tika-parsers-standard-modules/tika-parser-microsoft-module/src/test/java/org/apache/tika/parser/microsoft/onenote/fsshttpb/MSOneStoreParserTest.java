@@ -71,7 +71,13 @@ public class MSOneStoreParserTest {
         cellManifest.cellManifestCurrentRevision = null;
         assertNull(parseCell(parser, cellID, pkg));
         cellManifest.cellManifestCurrentRevision = new CellManifestCurrentRevision();
-        cellManifest.cellManifestCurrentRevision.cellManifestCurrentRevisionExGuid = id(3);
+        ExGuid missingRevisionID = id(3);
+        cellManifest.cellManifestCurrentRevision.cellManifestCurrentRevisionExGuid =
+                missingRevisionID;
+        StorageIndexRevisionMapping missingManifestMapping = new StorageIndexRevisionMapping();
+        missingManifestMapping.revisionExGuid = missingRevisionID;
+        missingManifestMapping.revisionMappingExGuid = id(4);
+        pkg.storageIndex.storageIndexRevisionMappingList.add(missingManifestMapping);
         assertNull(parseCell(parser, cellID, pkg));
     }
 
@@ -135,6 +141,10 @@ public class MSOneStoreParserTest {
 
         RevisionStoreCell result = parseCell(parser, cellID, pkg);
         assertEquals(2, result.objectGroups.size());
+
+        old.revisionManifest.baseRevisionID = id(1001);
+        RevisionStoreCell missingBaseResult = parseCell(parser, cellID, pkg);
+        assertEquals(2, missingBaseResult.objectGroups.size());
     }
 
     private static RevisionManifestDataElementData revision(ExGuid revisionID,

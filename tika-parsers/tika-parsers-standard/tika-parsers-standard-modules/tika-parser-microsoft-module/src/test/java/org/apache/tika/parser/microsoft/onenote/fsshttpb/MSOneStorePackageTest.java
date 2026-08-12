@@ -20,7 +20,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.StringWriter;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -96,6 +95,7 @@ public class MSOneStorePackageTest {
     @Test
     public void testUnresolvedRootsFallBackToAllObjects() throws Exception {
         RevisionStoreCell cell = cellWithText(cell(1, 1), "fallback content");
+        cell.rootDeclares.clear();
         RevisionManifestRootDeclare missingRoot = new RevisionManifestRootDeclare();
         missingRoot.objectExGuid = id(999);
         cell.rootDeclares.add(missingRoot);
@@ -104,18 +104,6 @@ public class MSOneStorePackageTest {
         pkg.cells.add(cell);
 
         assertTrue(walk(pkg).contains("fallback content"));
-        Method walkCell = MSOneStorePackage.class.getDeclaredMethod("walkCell",
-                RevisionStoreCell.class, OneNoteTreeWalkerOptions.class, Metadata.class,
-                XHTMLContentHandler.class);
-        walkCell.setAccessible(true);
-        Metadata metadata = new Metadata();
-        StringWriter writer = new StringWriter();
-        XHTMLContentHandler xhtml = new XHTMLContentHandler(
-                new ToTextContentHandler(writer), metadata, new ParseContext());
-        xhtml.startDocument();
-        walkCell.invoke(pkg, cell, new OneNoteTreeWalkerOptions(), metadata, xhtml);
-        xhtml.endDocument();
-        assertTrue(writer.toString().contains("fallback content"));
     }
 
     @Test
@@ -161,7 +149,7 @@ public class MSOneStorePackageTest {
                         new PropertySpec(PropertyType.ObjectSpaceID, 0x20001D78, new NoData()),
                         new PropertySpec(PropertyType.ObjectSpaceID, 0x20001D79, new NoData()),
                         new PropertySpec(PropertyType.FourBytesOfLengthFollowedByData,
-                                0x1C001DD7, bytes((byte) 'u', (byte) 0)),
+                                0x1C001DD7, bytes((byte) 'u', (byte) 0, (byte) 1)),
                         new PropertySpec(PropertyType.FourBytesOfLengthFollowedByData,
                                 0x1C001C22, bytes((byte) 'h', (byte) 0, (byte) 'i', (byte) 0,
                                         (byte) 0, (byte) 0))),

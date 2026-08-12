@@ -113,37 +113,48 @@ public class MSOneStoreParser {
         if (headerCellStorageIndexCellMapping != null) {
             msOneStorePackage.headerCellCellManifest =
                     this.findCellManifest(headerCellStorageIndexCellMapping.cellMappingExGuid);
-            StorageIndexRevisionMapping headerCellRevisionManifestMapping =
-                    msOneStorePackage.findStorageIndexRevisionMapping(
-                            msOneStorePackage.headerCellCellManifest.cellManifestCurrentRevision
-                                    .cellManifestCurrentRevisionExGuid);
-            msOneStorePackage.headerCellRevisionManifest = this.findRevisionManifestDataElement(
-                    headerCellRevisionManifestMapping.revisionMappingExGuid);
-            msOneStorePackage.headerCell =
-                    this.parseHeaderCell(msOneStorePackage.headerCellRevisionManifest);
+            if (msOneStorePackage.headerCellCellManifest != null &&
+                    msOneStorePackage.headerCellCellManifest.cellManifestCurrentRevision != null) {
+                StorageIndexRevisionMapping headerCellRevisionManifestMapping =
+                        msOneStorePackage.findStorageIndexRevisionMapping(
+                                msOneStorePackage.headerCellCellManifest.cellManifestCurrentRevision
+                                        .cellManifestCurrentRevisionExGuid);
+                if (headerCellRevisionManifestMapping != null) {
+                    msOneStorePackage.headerCellRevisionManifest =
+                            this.findRevisionManifestDataElement(
+                                    headerCellRevisionManifestMapping.revisionMappingExGuid);
+                    if (msOneStorePackage.headerCellRevisionManifest != null) {
+                        msOneStorePackage.headerCell =
+                                this.parseHeaderCell(msOneStorePackage.headerCellRevisionManifest);
+                    }
+                }
+            }
+        }
 
-            // Parse Data root
-            CellID dataRootCellID =
-                    msOneStorePackage.storageManifest.storageManifestRootDeclareList.get(1).cellID;
-            storageIndexHashTab.add(dataRootCellID);
-            RevisionStoreCell dataRootCell = this.parseCell(dataRootCellID, msOneStorePackage);
+        // Parse Data root independently of the header-cell metadata. A malformed header cell
+        // should not prevent valid section cells from being parsed.
+        CellID dataRootCellID =
+                msOneStorePackage.storageManifest.storageManifestRootDeclareList.get(1).cellID;
+        storageIndexHashTab.add(dataRootCellID);
+        RevisionStoreCell dataRootCell = this.parseCell(dataRootCellID, msOneStorePackage);
+        if (dataRootCell != null) {
             msOneStorePackage.dataRoot = dataRootCell.objectGroups;
             msOneStorePackage.dataRootCell = dataRootCell;
-            // Parse other data
-            for (StorageIndexCellMapping storageIndexCellMapping : msOneStorePackage.storageIndex
-                    .storageIndexCellMappingList) {
-                if (!storageIndexHashTab.contains(storageIndexCellMapping.cellID)) {
-                    RevisionStoreCell cell =
-                            this.parseCell(storageIndexCellMapping.cellID, msOneStorePackage);
-                    // The storage index can retain a mapping for a deleted version context.
-                    // Such an entry has no CellManifestDataElementData (often its mapping GUID
-                    // is all zero) and therefore cannot contain current document content.
-                    if (cell != null) {
-                        msOneStorePackage.OtherFileNodeList.addAll(cell.objectGroups);
-                        msOneStorePackage.cells.add(cell);
-                    }
-                    storageIndexHashTab.add(storageIndexCellMapping.cellID);
+        }
+        // Parse other data
+        for (StorageIndexCellMapping storageIndexCellMapping : msOneStorePackage.storageIndex
+                .storageIndexCellMappingList) {
+            if (!storageIndexHashTab.contains(storageIndexCellMapping.cellID)) {
+                RevisionStoreCell cell =
+                        this.parseCell(storageIndexCellMapping.cellID, msOneStorePackage);
+                // The storage index can retain a mapping for a deleted version context.
+                // Such an entry has no CellManifestDataElementData (often its mapping GUID
+                // is all zero) and therefore cannot contain current document content.
+                if (cell != null) {
+                    msOneStorePackage.OtherFileNodeList.addAll(cell.objectGroups);
+                    msOneStorePackage.cells.add(cell);
                 }
+                storageIndexHashTab.add(storageIndexCellMapping.cellID);
             }
         }
         return msOneStorePackage;
@@ -156,9 +167,9 @@ public class MSOneStoreParser {
      * @return The CellManifestDataElementData instance.
      */
     private CellManifestDataElementData findCellManifest(ExGuid cellMappingExtendedGUID) {
-        return (CellManifestDataElementData) this.cellManifestDataElements.stream()
+        return this.cellManifestDataElements.stream()
                 .filter(d -> d.dataElementExGuid.equals(cellMappingExtendedGUID)).findFirst()
-                .orElse(new DataElement()).data;
+                .map(d -> (CellManifestDataElementData) d.data).orElse(null);
     }
 
     /**
@@ -169,9 +180,9 @@ public class MSOneStoreParser {
      */
     private RevisionManifestDataElementData findRevisionManifestDataElement(
             ExGuid revisionMappingExtendedGUID) {
-        return (RevisionManifestDataElementData) this.revisionManifestDataElements.stream()
+        return this.revisionManifestDataElements.stream()
                 .filter(d -> d.dataElementExGuid.equals(revisionMappingExtendedGUID)).findFirst()
-                .orElse(new DataElement()).data;
+                .map(d -> (RevisionManifestDataElementData) d.data).orElse(null);
     }
 
     private HeaderCell parseHeaderCell(RevisionManifestDataElementData headerCellRevisionManifest)

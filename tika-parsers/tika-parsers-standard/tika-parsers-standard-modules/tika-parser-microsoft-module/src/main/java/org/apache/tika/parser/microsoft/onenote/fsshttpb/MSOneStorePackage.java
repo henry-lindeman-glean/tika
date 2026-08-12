@@ -151,8 +151,7 @@ public class MSOneStorePackage {
         StorageIndexCellMapping storageIndexCellMapping = null;
         if (this.storageIndex != null) {
             storageIndexCellMapping = this.storageIndex.storageIndexCellMappingList.stream()
-                    .filter(s -> s.cellID.equals(cellID)).findFirst()
-                    .orElse(new StorageIndexCellMapping());
+                    .filter(s -> s.cellID.equals(cellID)).findFirst().orElse(null);
         }
         return storageIndexCellMapping;
     }
@@ -169,7 +168,7 @@ public class MSOneStorePackage {
         if (this.storageIndex != null) {
             instance = this.storageIndex.storageIndexRevisionMappingList.stream()
                     .filter(r -> r.revisionExGuid.equals(revisionExtendedGUID)).findFirst()
-                    .orElse(new StorageIndexRevisionMapping());
+                    .orElse(null);
         }
 
         return instance;
