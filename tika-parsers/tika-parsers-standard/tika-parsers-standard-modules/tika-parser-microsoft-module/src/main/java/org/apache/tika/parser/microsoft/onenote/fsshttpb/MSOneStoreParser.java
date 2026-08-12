@@ -135,8 +135,13 @@ public class MSOneStoreParser {
                 if (!storageIndexHashTab.contains(storageIndexCellMapping.cellID)) {
                     RevisionStoreCell cell =
                             this.parseCell(storageIndexCellMapping.cellID, msOneStorePackage);
-                    msOneStorePackage.OtherFileNodeList.addAll(cell.objectGroups);
-                    msOneStorePackage.cells.add(cell);
+                    // The storage index can retain a mapping for a deleted version context.
+                    // Such an entry has no CellManifestDataElementData (often its mapping GUID
+                    // is all zero) and therefore cannot contain current document content.
+                    if (cell != null) {
+                        msOneStorePackage.OtherFileNodeList.addAll(cell.objectGroups);
+                        msOneStorePackage.cells.add(cell);
+                    }
                     storageIndexHashTab.add(storageIndexCellMapping.cellID);
                 }
             }
@@ -187,15 +192,27 @@ public class MSOneStoreParser {
             throws IOException {
         StorageIndexCellMapping storageIndexCellMapping =
                 msOneStorePackage.findStorageIndexCellMapping(objectGroupCellID);
+        if (storageIndexCellMapping == null) {
+            return null;
+        }
         CellManifestDataElementData cellManifest =
                 this.findCellManifest(storageIndexCellMapping.cellMappingExGuid);
+        if (cellManifest == null || cellManifest.cellManifestCurrentRevision == null) {
+            return null;
+        }
         List<RevisionStoreObjectGroup> objectGroups = new ArrayList<>();
         msOneStorePackage.cellManifests.add(cellManifest);
         StorageIndexRevisionMapping revisionMapping =
                 msOneStorePackage.findStorageIndexRevisionMapping(
                         cellManifest.cellManifestCurrentRevision.cellManifestCurrentRevisionExGuid);
+        if (revisionMapping == null) {
+            return null;
+        }
         RevisionManifestDataElementData revisionManifest =
                 findRevisionManifestDataElement(revisionMapping.revisionMappingExGuid);
+        if (revisionManifest == null || revisionManifest.revisionManifest == null) {
+            return null;
+        }
 
         // A revision manifest may only reference the object groups that were created or
         // modified in that revision. The remaining object groups belong to the chain of
