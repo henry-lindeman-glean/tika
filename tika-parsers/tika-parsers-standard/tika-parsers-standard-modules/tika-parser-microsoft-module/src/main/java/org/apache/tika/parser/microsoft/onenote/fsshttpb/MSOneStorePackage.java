@@ -506,6 +506,11 @@ public class MSOneStorePackage {
                 break;
             }
         }
+        int objectType = object.jcid == null || object.jcid.jcid == null ? -1 :
+                object.jcid.jcid.index;
+        boolean isListItem = objectType == 0x0d && actions.stream().anyMatch(action ->
+                action.oneNotePropertyEnum == OneNotePropertyEnum.ListNodes);
+        startObjectStructure(objectType, isListItem, xhtml);
         // The title structure of a page (StructureElementChildNodes) appears above the page
         // body on screen, but is declared after the body child nodes. Emit it first so the
         // text comes out in visual order.
@@ -525,6 +530,7 @@ public class MSOneStorePackage {
                         depth, resourceInfo);
             }
         }
+        endObjectStructure(objectType, isListItem, xhtml);
         return true;
     }
 
@@ -596,6 +602,57 @@ public class MSOneStorePackage {
                     TikaCoreProperties.EmbeddedResourceType.ATTACHMENT.toString()) : parentInfo;
         }
         return parentInfo;
+    }
+
+    /**
+     * Preserves the structural object types that OneNote uses for tables and list items.
+     * The surrounding page/layout objects remain divs or paragraphs, while these nodes map
+     * directly to standard XHTML so downstream consumers can retain the document structure.
+     */
+    private void startObjectStructure(int objectType, boolean isListItem,
+                                      XHTMLContentHandler xhtml) throws SAXException {
+        switch (objectType) {
+            case 0x22: // jcidTableNode
+                xhtml.startElement("table");
+                break;
+            case 0x23: // jcidTableRowNode
+                xhtml.startElement("tr");
+                break;
+            case 0x24: // jcidTableCellNode
+                xhtml.startElement("td");
+                break;
+            case 0x0d: // jcidOutlineElementNode
+                if (isListItem) {
+                    xhtml.startElement("ul");
+                    xhtml.startElement("li");
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void endObjectStructure(int objectType, boolean isListItem,
+                                    XHTMLContentHandler xhtml) throws SAXException {
+        switch (objectType) {
+            case 0x22: // jcidTableNode
+                xhtml.endElement("table");
+                break;
+            case 0x23: // jcidTableRowNode
+                xhtml.endElement("tr");
+                break;
+            case 0x24: // jcidTableCellNode
+                xhtml.endElement("td");
+                break;
+            case 0x0d: // jcidOutlineElementNode
+                if (isListItem) {
+                    xhtml.endElement("li");
+                    xhtml.endElement("ul");
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     /**

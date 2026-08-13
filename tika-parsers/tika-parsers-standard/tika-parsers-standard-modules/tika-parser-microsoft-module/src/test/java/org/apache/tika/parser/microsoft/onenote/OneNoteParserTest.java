@@ -261,6 +261,61 @@ public class OneNoteParserTest extends TikaTest {
     }
 
     /**
+     * A real FSSHTTPB section containing a primary image and a derived web rendition. This
+     * covers the full OneNoteParser/ParseContext embedded-document path, page ordering, and
+     * the deleted storage-index mapping emitted by newer OneNote accounts.
+     */
+    @Test
+    public void testOneNoteFsshttpbImageAndPageOrder() throws Exception {
+        List<byte[]> embedded = new ArrayList<>();
+        ParseContext context = new ParseContext();
+        context.set(EmbeddedDocumentExtractor.class, new EmbeddedDocumentExtractor() {
+            @Override
+            public boolean shouldParseEmbedded(Metadata metadata) {
+                return true;
+            }
+
+            @Override
+            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
+                                      Metadata metadata, ParseContext context,
+                                      boolean outputHtml) throws IOException {
+                embedded.add(stream.readAllBytes());
+            }
+        });
+        Metadata metadata = new Metadata();
+        ToTextContentHandler handler = new ToTextContentHandler();
+        try (TikaInputStream tis = getResourceAsStream(
+                "/test-documents/testOneNoteFsshttpbImage.one")) {
+            new OneNoteParser().parse(tis, handler, metadata, context);
+        }
+
+        String text = handler.toString();
+        assertTrue(text.indexOf("Page 1") < text.indexOf("Pictures or something"));
+        assertTrue(text.indexOf("Pictures or something") < text.indexOf("Very wide"));
+        assertEquals(1, StringUtils.countMatches(text, "Pictures or something"));
+        assertEquals(1, embedded.size());
+        assertTrue(embedded.get(0).length > 500_000);
+        assertEquals((byte) 0x89, embedded.get(0)[0]);
+        assertEquals((byte) 0x50, embedded.get(0)[1]);
+        assertEquals((byte) 0x4e, embedded.get(0)[2]);
+        assertEquals((byte) 0x47, embedded.get(0)[3]);
+    }
+
+    @Test
+    public void testOneNoteFsshttpbTableAndListStructure() throws Exception {
+        String xml = getXML("testOneNoteFsshttpbStructure.one", new OneNoteParser(),
+                new ParseContext()).xml;
+
+        assertContains("<table>", xml);
+        assertContains("<tr>", xml);
+        assertContains("<td>", xml);
+        assertContains("Table cell 1a", xml);
+        assertContains("<ul>", xml);
+        assertContains("<li>", xml);
+        assertContains("Indented bullet", xml);
+    }
+
+    /**
      * Test a document pulled from Office 365 which stores the MS-ONESTORE document using the MS-FSSHTTPB
      * protocol.
      */
@@ -281,8 +336,10 @@ public class OneNoteParserTest extends TikaTest {
         assertEquals(Instant.ofEpochSecond(1636621448),
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(TikaCoreProperties.MODIFIED))));
         assertContains("Section1Page1Content", txt);
-        // content from revisions other than each cell's current revision manifest
         assertContains("Section1Page2Content", txt);
+        assertTrue(txt.indexOf("Section1Page1Content") <
+                txt.indexOf("Section1Page2Content"));
+        assertEquals(1, StringUtils.countMatches(txt, "Section1Page2Content"));
     }
 
     /**
@@ -308,8 +365,10 @@ public class OneNoteParserTest extends TikaTest {
                 Instant.ofEpochSecond(Long.parseLong(metadata.get(TikaCoreProperties.MODIFIED))));
 
         assertContains("Section1Page1Content", txt);
-        // content from revisions other than each cell's current revision manifest
         assertContains("Section1Page2Content", txt);
+        assertTrue(txt.indexOf("Section1Page1Content") <
+                txt.indexOf("Section1Page2Content"));
+        assertEquals(1, StringUtils.countMatches(txt, "Section1Page2Content"));
     }
 
     private void assertNoJunk(String txt) {

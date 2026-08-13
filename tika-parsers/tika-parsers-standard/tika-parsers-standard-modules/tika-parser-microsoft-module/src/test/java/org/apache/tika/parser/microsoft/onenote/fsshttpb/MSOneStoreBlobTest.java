@@ -208,6 +208,9 @@ public class MSOneStoreBlobTest {
         ObjectDataBLOB blob = new ObjectDataBLOB();
         blob.data = null;
         assertNull(blob.getData());
+        // serializeToByteList includes the stream-object header; this exercises the empty
+        // payload branch in ObjectDataBLOB.serializeItemsToByteList.
+        blob.serializeToByteList();
         blob.data = new BinaryItem();
         blob.data.content = null;
         assertNull(blob.getData());
@@ -246,6 +249,22 @@ public class MSOneStoreBlobTest {
         });
 
         DataElement blobElement = roundTripBlobElement();
+        MSOneStorePackage skippedPackage = packageWithFileData(
+                (ObjectDataBLOBDataElementData) blobElement.data);
+        walkWithExtractor(skippedPackage, new EmbeddedDocumentExtractor() {
+            @Override
+            public boolean shouldParseEmbedded(Metadata metadata) {
+                return false;
+            }
+
+            @Override
+            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
+                                      Metadata metadata, ParseContext context,
+                                      boolean outputHtml) {
+                throw new AssertionError("a declined embedded document must not be parsed");
+            }
+        });
+
         MSOneStorePackage failedPackage = packageWithFileData(
                 (ObjectDataBLOBDataElementData) blobElement.data);
         walkWithExtractor(failedPackage, new EmbeddedDocumentExtractor() {
