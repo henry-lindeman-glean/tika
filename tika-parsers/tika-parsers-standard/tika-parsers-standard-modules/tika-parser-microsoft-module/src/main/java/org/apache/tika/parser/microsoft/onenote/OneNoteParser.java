@@ -168,7 +168,7 @@ public class OneNoteParser implements Parser {
                     MSOneStorePackage pkg =
                             onenoteParser.parse(alternatePackageOneStoreFile.dataElementPackage);
 
-                    pkg.walkTree(options, metadata, xhtml);
+                    pkg.walkTree(options, metadata, xhtml, context);
                 } catch (Exception e) {
                     OneNoteLegacyDumpStrings dumpStrings =
                             new OneNoteLegacyDumpStrings(oneNoteDirectFileResource, xhtml);
