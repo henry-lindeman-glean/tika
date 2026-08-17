@@ -31,7 +31,10 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
 
+import org.apache.tika.annotation.TikaComponent;
+import org.apache.tika.exception.EmbeddedLimitReachedException;
 import org.apache.tika.exception.TikaException;
+import org.apache.tika.exception.WriteLimitReachedException;
 import org.apache.tika.io.TemporaryResources;
 import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
@@ -170,6 +173,10 @@ public class OneNoteParser implements Parser {
 
                     pkg.walkTree(options, metadata, xhtml, context);
                 } catch (Exception e) {
+                    WriteLimitReachedException.throwIfWriteLimitReached(e);
+                    if (e instanceof EmbeddedLimitReachedException) {
+                        throw (EmbeddedLimitReachedException) e;
+                    }
                     OneNoteLegacyDumpStrings dumpStrings =
                             new OneNoteLegacyDumpStrings(oneNoteDirectFileResource, xhtml);
                     dumpStrings.dump();
