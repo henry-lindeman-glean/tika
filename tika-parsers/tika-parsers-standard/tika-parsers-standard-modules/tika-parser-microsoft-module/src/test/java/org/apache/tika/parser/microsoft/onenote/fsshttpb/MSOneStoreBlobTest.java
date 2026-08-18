@@ -253,7 +253,7 @@ public class MSOneStoreBlobTest {
                 (ObjectDataBLOBDataElementData) blobElement.data);
         walkWithExtractor(skippedPackage, new EmbeddedDocumentExtractor() {
             @Override
-            public boolean shouldParseEmbedded(Metadata metadata) {
+            public boolean shouldParseEmbedded(Metadata metadata, ParseContext parseContext) {
                 return false;
             }
 
