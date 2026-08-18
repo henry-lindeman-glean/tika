@@ -962,7 +962,7 @@ public class MSOneStorePackage {
         if (data == null || data.length == 0 || embeddedDocumentExtractor == null) {
             return;
         }
-        Metadata embeddedMetadata = Metadata.newInstance(this.parseContext);
+        Metadata embeddedMetadata = new Metadata();
         embeddedMetadata.set(TikaCoreProperties.EMBEDDED_RESOURCE_TYPE,
                 resourceInfo == null ? TikaCoreProperties.EmbeddedResourceType.ATTACHMENT.toString() :
                         resourceInfo.type);
@@ -974,9 +974,9 @@ public class MSOneStorePackage {
         xhtml.startElement("div", attributes);
         xhtml.endElement("div");
         try (TikaInputStream tis = TikaInputStream.get(data)) {
-            if (embeddedDocumentExtractor.shouldParseEmbedded(embeddedMetadata, parseContext)) {
+            if (embeddedDocumentExtractor.shouldParseEmbedded(embeddedMetadata)) {
                 embeddedDocumentExtractor.parseEmbedded(tis, new EmbeddedContentHandler(xhtml),
-                        embeddedMetadata, this.parseContext, false);
+                        embeddedMetadata, false);
             }
         } catch (IOException e) {
             EmbeddedDocumentUtil.recordEmbeddedStreamException(e, parentMetadata);

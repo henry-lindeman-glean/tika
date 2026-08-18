@@ -23,10 +23,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
@@ -34,7 +36,6 @@ import org.xml.sax.ContentHandler;
 
 import org.apache.tika.TikaTest;
 import org.apache.tika.extractor.EmbeddedDocumentExtractor;
-import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.parser.ParseContext;
@@ -238,25 +239,24 @@ public class OneNoteParserTest extends TikaTest {
         ParseContext context = new ParseContext();
         context.set(EmbeddedDocumentExtractor.class, new EmbeddedDocumentExtractor() {
             @Override
-            public boolean shouldParseEmbedded(Metadata metadata, ParseContext parseContext) {
+            public boolean shouldParseEmbedded(Metadata metadata) {
                 return true;
             }
 
             @Override
-            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
-                                      Metadata metadata, ParseContext context,
-                                      boolean outputHtml) throws IOException {
+            public void parseEmbedded(InputStream stream, ContentHandler handler,
+                                      Metadata metadata, boolean outputHtml) throws IOException {
                 embedded.add(stream.readAllBytes());
                 embeddedTypes.add(metadata.get(TikaCoreProperties.EMBEDDED_RESOURCE_TYPE));
             }
         });
-        try (TikaInputStream tis = getResourceAsStream("/test-documents/testOneNoteEmbeddedImage.one")) {
+        try (InputStream tis = getResourceAsStream("/test-documents/testOneNoteEmbeddedImage.one")) {
             new OneNoteParser().parse(tis, new ToTextContentHandler(), new Metadata(), context);
         }
 
         assertFalse(embedded.isEmpty());
         assertTrue(embedded.stream().anyMatch(bytes -> bytes.length > 1000),
-                () -> "embedded sizes: " + embedded.stream().map(bytes -> bytes.length).toList());
+                () -> "embedded sizes: " + embedded.stream().map(bytes -> bytes.length).collect(Collectors.toList()));
         assertTrue(embeddedTypes.contains("INLINE"));
     }
 
@@ -271,20 +271,19 @@ public class OneNoteParserTest extends TikaTest {
         ParseContext context = new ParseContext();
         context.set(EmbeddedDocumentExtractor.class, new EmbeddedDocumentExtractor() {
             @Override
-            public boolean shouldParseEmbedded(Metadata metadata, ParseContext parseContext) {
+            public boolean shouldParseEmbedded(Metadata metadata) {
                 return true;
             }
 
             @Override
-            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
-                                      Metadata metadata, ParseContext context,
-                                      boolean outputHtml) throws IOException {
+            public void parseEmbedded(InputStream stream, ContentHandler handler,
+                                      Metadata metadata, boolean outputHtml) throws IOException {
                 embedded.add(stream.readAllBytes());
             }
         });
         Metadata metadata = new Metadata();
         ToTextContentHandler handler = new ToTextContentHandler();
-        try (TikaInputStream tis = getResourceAsStream(
+        try (InputStream tis = getResourceAsStream(
                 "/test-documents/testOneNoteFsshttpbImage.one")) {
             new OneNoteParser().parse(tis, handler, metadata, context);
         }

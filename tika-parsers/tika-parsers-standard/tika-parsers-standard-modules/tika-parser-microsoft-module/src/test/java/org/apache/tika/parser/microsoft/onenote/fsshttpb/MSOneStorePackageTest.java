@@ -201,7 +201,7 @@ public class MSOneStorePackageTest {
         Metadata metadata = new Metadata();
         StringWriter writer = new StringWriter();
         XHTMLContentHandler xhtml = new XHTMLContentHandler(
-                new ToTextContentHandler(writer), metadata, new ParseContext());
+                new ToTextContentHandler(writer), metadata);
         xhtml.startDocument();
         Object result = walkObject.invoke(new MSOneStorePackage(), hugeArrayRoot,
                 new java.util.HashMap<>(), new java.util.HashSet<>(), null,
@@ -337,7 +337,7 @@ public class MSOneStorePackageTest {
         ParseContext context = new ParseContext();
         StringWriter writer = new StringWriter();
         XHTMLContentHandler xhtml = new XHTMLContentHandler(
-                new ToTextContentHandler(writer), metadata, context);
+                new ToTextContentHandler(writer), metadata);
         xhtml.startDocument();
         pkg.walkTree(new OneNoteTreeWalkerOptions(), metadata, xhtml, context);
         xhtml.endDocument();

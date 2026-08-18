@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
@@ -37,7 +38,6 @@ import org.junit.jupiter.api.Test;
 import org.xml.sax.ContentHandler;
 
 import org.apache.tika.extractor.EmbeddedDocumentExtractor;
-import org.apache.tika.io.TikaInputStream;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.metadata.TikaCoreProperties;
 import org.apache.tika.parser.ParseContext;
@@ -131,14 +131,13 @@ public class MSOneStoreBlobTest {
         ParseContext context = new ParseContext();
         context.set(EmbeddedDocumentExtractor.class, new EmbeddedDocumentExtractor() {
             @Override
-            public boolean shouldParseEmbedded(Metadata metadata, ParseContext parseContext) {
+            public boolean shouldParseEmbedded(Metadata metadata) {
                 return true;
             }
 
             @Override
-            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
-                                      Metadata metadata, ParseContext context,
-                                      boolean outputHtml) throws IOException {
+            public void parseEmbedded(InputStream stream, ContentHandler handler,
+                                      Metadata metadata, boolean outputHtml) throws IOException {
                 embedded.add(stream.readAllBytes());
                 embeddedNames.add(metadata.get(TikaCoreProperties.RESOURCE_NAME_KEY));
                 embeddedTypes.add(metadata.get(TikaCoreProperties.EMBEDDED_RESOURCE_TYPE));
@@ -147,8 +146,7 @@ public class MSOneStoreBlobTest {
 
         Metadata metadata = new Metadata();
         XHTMLContentHandler xhtml =
-                new XHTMLContentHandler(new ToTextContentHandler(new StringWriter()), metadata,
-                        context);
+                new XHTMLContentHandler(new ToTextContentHandler(new StringWriter()), metadata);
         xhtml.startDocument();
         pkg.walkTree(new OneNoteTreeWalkerOptions(), metadata, xhtml, context);
         xhtml.endDocument();
@@ -237,14 +235,13 @@ public class MSOneStoreBlobTest {
         MSOneStorePackage emptyPackage = packageWithFileData(new ObjectDataBLOBDataElementData());
         walkWithExtractor(emptyPackage, new EmbeddedDocumentExtractor() {
             @Override
-            public boolean shouldParseEmbedded(Metadata metadata, ParseContext parseContext) {
+            public boolean shouldParseEmbedded(Metadata metadata) {
                 throw new AssertionError("empty data must not reach the extractor");
             }
 
             @Override
-            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
-                                      Metadata metadata, ParseContext context,
-                                      boolean outputHtml) {
+            public void parseEmbedded(InputStream stream, ContentHandler handler,
+                                      Metadata metadata, boolean outputHtml) {
             }
         });
 
@@ -253,14 +250,13 @@ public class MSOneStoreBlobTest {
                 (ObjectDataBLOBDataElementData) blobElement.data);
         walkWithExtractor(skippedPackage, new EmbeddedDocumentExtractor() {
             @Override
-            public boolean shouldParseEmbedded(Metadata metadata, ParseContext parseContext) {
+            public boolean shouldParseEmbedded(Metadata metadata) {
                 return false;
             }
 
             @Override
-            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
-                                      Metadata metadata, ParseContext context,
-                                      boolean outputHtml) {
+            public void parseEmbedded(InputStream stream, ContentHandler handler,
+                                      Metadata metadata, boolean outputHtml) {
                 throw new AssertionError("a declined embedded document must not be parsed");
             }
         });
@@ -269,14 +265,13 @@ public class MSOneStoreBlobTest {
                 (ObjectDataBLOBDataElementData) blobElement.data);
         walkWithExtractor(failedPackage, new EmbeddedDocumentExtractor() {
             @Override
-            public boolean shouldParseEmbedded(Metadata metadata, ParseContext parseContext) {
+            public boolean shouldParseEmbedded(Metadata metadata) {
                 return true;
             }
 
             @Override
-            public void parseEmbedded(TikaInputStream stream, ContentHandler handler,
-                                      Metadata metadata, ParseContext context,
-                                      boolean outputHtml) throws IOException {
+            public void parseEmbedded(InputStream stream, ContentHandler handler,
+                                      Metadata metadata, boolean outputHtml) throws IOException {
                 throw new IOException("synthetic embedded parse failure");
             }
         });
@@ -335,7 +330,7 @@ public class MSOneStoreBlobTest {
         context.set(EmbeddedDocumentExtractor.class, extractor);
         Metadata metadata = new Metadata();
         XHTMLContentHandler xhtml = new XHTMLContentHandler(
-                new ToTextContentHandler(new StringWriter()), metadata, context);
+                new ToTextContentHandler(new StringWriter()), metadata);
         xhtml.startDocument();
         pkg.walkTree(new OneNoteTreeWalkerOptions(), metadata, xhtml, context);
         xhtml.endDocument();
