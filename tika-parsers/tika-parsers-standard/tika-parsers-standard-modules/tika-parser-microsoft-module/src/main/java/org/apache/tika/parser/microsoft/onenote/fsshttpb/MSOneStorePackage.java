@@ -917,7 +917,7 @@ public class MSOneStorePackage {
         xhtml.startElement("div", attributes);
         xhtml.endElement("div");
         try (TikaInputStream tis = TikaInputStream.get(data)) {
-            if (embeddedDocumentExtractor.shouldParseEmbedded(embeddedMetadata)) {
+            if (embeddedDocumentExtractor.shouldParseEmbedded(embeddedMetadata, parseContext)) {
                 embeddedDocumentExtractor.parseEmbedded(tis, new EmbeddedContentHandler(xhtml),
                         embeddedMetadata, this.parseContext, false);
             }
